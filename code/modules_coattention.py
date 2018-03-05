@@ -45,15 +45,10 @@ class RNNEncoder(object):
         self.hidden_size = hidden_size
         self.keep_prob = keep_prob
 
-        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
-
-        self.rnn_cell_fw_2 = rnn_cell.LSTMCell(self.hidden_size)
-        self.rnn_cell_fw_2 = DropoutWrapper(self.rnn_cell_fw_2, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw_2 = rnn_cell.LSTMCell(self.hidden_size)
-        self.rnn_cell_bw_2 = DropoutWrapper(self.rnn_cell_bw_2, input_keep_prob=self.keep_prob)
 
     def build_graph(self, inputs, masks):
         """
@@ -68,18 +63,15 @@ class RNNEncoder(object):
             This is all hidden states (fw and bw hidden states are concatenated).
         """
         with vs.variable_scope("RNNEncoder"):
-            input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+            input_lens = tf.reduce_sum(masks, reduction_indices=1)  # shape (batch_size)
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
             # Each is shape (batch_size, seq_len, hidden_size).
-            # (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs, input_lens, dtype=tf.float32)
-            out, _, _  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
-                                                                                 [self.rnn_cell_bw, self.rnn_cell_bw_2],
-                                                                                 inputs, sequence_length=input_lens,
-                                                                                 dtype=tf.float32)
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs,
+                                                                  input_lens, dtype=tf.float32)
 
             # Concatenate the forward and backward hidden states
-            # out = tf.concat([fw_out, bw_out], 2)
+            out = tf.concat([fw_out, bw_out], 2)
 
             # Apply dropout
             out = tf.nn.dropout(out, self.keep_prob)
@@ -172,18 +164,132 @@ class BasicAttn(object):
         with vs.variable_scope("BasicAttn"):
 
             # Calculate attention distribution
-            values_t = tf.transpose(values, perm=[0, 2, 1]) # (batch_size, value_vec_size, num_values)
-            attn_logits = tf.matmul(keys, values_t) # shape (batch_size, num_keys, num_values)
-            attn_logits_mask = tf.expand_dims(values_mask, 1) # shape (batch_size, 1, num_values)
-            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) # shape (batch_size, num_keys, num_values). take softmax over values
+            values_t = tf.transpose(values, perm=[0, 2, 1])  # (batch_size, value_vec_size, num_values)
+            attn_logits = tf.matmul(keys, values_t)  # shape (batch_size, num_keys, num_values)
+            attn_logits_mask = tf.expand_dims(values_mask, 1)  # shape (batch_size, 1, num_values)
+            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask,
+                                          2)  # shape (batch_size, num_keys, num_values). take softmax over values
 
             # Use attention distribution to take weighted sum of values
-            output = tf.matmul(attn_dist, values) # shape (batch_size, num_keys, value_vec_size)
+            output = tf.matmul(attn_dist, values)  # shape (batch_size, num_keys, value_vec_size)
 
             # Apply dropout
             output = tf.nn.dropout(output, self.keep_prob)
 
             return attn_dist, output
+
+
+class Coattention(object):
+    def __init__(self, keep_prob, key_vec_size, value_vec_size, batch_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+        self.batch_size = batch_size
+
+    def build_graph(self, values, values_mask, keys):
+        """
+        Keys attend to values.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+          values_mask: Tensor shape (batch_size, num_values).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, value_vec_size)
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("Coattention"):
+            # size params:
+            # batch_size = 100, value vec size = 400
+            num_values = values.get_shape().as_list()[1]
+
+            # Calculate attention distribution
+            values_t = tf.transpose(values, perm=[0, 2, 1])  # (batch_size, value_vec_size, num_values)
+            W = tf.get_variable("W", shape=(self.value_vec_size, self.value_vec_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+            b = tf.get_variable("b", shape=(self.value_vec_size, num_values), initializer=tf.constant_initializer(0))
+
+            q_new = tf.map_fn(lambda x: tf.matmul(W, x) + b, values_t)
+
+            c_senti = tf.get_variable("c_senti", shape=(1, self.value_vec_size), initializer=tf.constant_initializer(0))
+            q_senti = tf.get_variable("q_senti", shape=(self.value_vec_size, 1), initializer=tf.constant_initializer(0))
+
+            # keys shape (batch_size, num_keys, value_vec_size) = (None, 600, 400)
+            # q_new shape(batch_size, value_vec_size, num_values) = (None, 400, 30)
+            c_concat = tf.map_fn(lambda x: tf.concat([x, c_senti], axis=0), keys)
+            q_concat = tf.map_fn(lambda x: tf.concat([x, q_senti], axis=1), q_new)
+
+            L = tf.matmul(c_concat, q_concat)  # shape (batch_size, num_keys+1, num_values+1) = (None, 601, 31)
+            print("---------------mask size: ", values_mask.get_shape().as_list())
+            new_values_mask = tf.map_fn(lambda x: tf.concat([x, [1]], axis=0), values_mask)
+            L_mask = tf.expand_dims(new_values_mask, 1)
+
+            # print("---------------L size: ", L.get_shape().as_list())
+            # print("---------------L mask size: ", L_mask.get_shape().as_list())
+
+            q_t = tf.transpose(q_concat, perm=[0, 2, 1])  # (batch_size, num_values+1, value_vec_size)
+            _, alpha_dist = masked_softmax(L, L_mask, 2)
+            a_output = tf.matmul(alpha_dist, q_t)  # (batch_size, num_keys+1, value_vec_size) = (None, 601, 400)
+            # print("---------------a output size: ", a_output.get_shape().as_list())
+
+            _, beta_dist = masked_softmax(L, L_mask, 1)
+            beta_dist_t = tf.transpose(beta_dist, perm=[0, 2, 1])
+            b_output = tf.matmul(beta_dist_t, c_concat)
+            # print("---------------b output size: ", b_output.get_shape().as_list())
+
+            s_output = tf.matmul(alpha_dist, b_output)
+            concat_output = tf.concat([s_output, a_output], axis=2)
+            concat_output = concat_output[:, :-1, :]
+            # print("---------------s_output size: ", s_output.get_shape().as_list())
+            # print("---------------concat_output size: ", concat_output.get_shape().as_list())
+
+            concat_output = tf.nn.dropout(concat_output, self.keep_prob)
+            return concat_output
+
+
+class BiLSTMEncoder(object):
+
+    def __init__(self, hidden_size, keep_prob):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
+
+    def build_graph(self, inputs):
+        with vs.variable_scope("BiLSTMEncoder"):
+            # input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+
+            # Note: fw_out and bw_out are the hidden states for every timestep.
+            # Each is shape (batch_size, seq_len, hidden_size).
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs,
+                                                                  dtype=tf.float32)
+
+            # Concatenate the forward and backward hidden states
+            out = tf.concat([fw_out, bw_out], 2)
+
+            # Apply dropout
+            out = tf.nn.dropout(out, self.keep_prob)
+            return out
 
 
 def masked_softmax(logits, mask, dim):
@@ -205,7 +311,7 @@ def masked_softmax(logits, mask, dim):
         Should be 0 in padding locations.
         Should sum to 1 over given dimension.
     """
-    exp_mask = (1 - tf.cast(mask, 'float')) * (-1e30) # -large where there's padding, 0 elsewhere
-    masked_logits = tf.add(logits, exp_mask) # where there's padding, set logits to -large
+    exp_mask = (1 - tf.cast(mask, 'float')) * (-1e30)  # -large where there's padding, 0 elsewhere
+    masked_logits = tf.add(logits, exp_mask)  # where there's padding, set logits to -large
     prob_dist = tf.nn.softmax(masked_logits, dim)
     return masked_logits, prob_dist
