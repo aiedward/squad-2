@@ -305,6 +305,11 @@ class QAModel(object):
 
         # Take argmax to get start_pos and end_post, both shape (batch_size)
         start_pos = np.argmax(start_dist, axis=1)
+        # orign_end_pos = np.argmax(end_dist, axis=1)
+        for i, row in enumerate(end_dist):
+            row[0:start_pos[i]] = 0
+            row[start_pos[i]+21:] = 0
+
         end_pos = np.argmax(end_dist, axis=1)
 
         return start_pos, end_pos

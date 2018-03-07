@@ -297,11 +297,36 @@ class QAModel(object):
         # Get start_dist and end_dist, both shape (batch_size, context_len)
         start_dist, end_dist = self.get_prob_dists(session, batch)
 
-        # Take argmax to get start_pos and end_post, both shape (batch_size)
-        start_pos = np.argmax(start_dist, axis=1)
-        end_pos = np.argmax(end_dist, axis=1)
+        # # Take argmax to get start_pos and end_post, both shape (batch_size)
+        # start_pos = np.argmax(start_dist, axis=1)
+        # # orign_end_pos = np.argmax(end_dist, axis=1)
+        # for i, row in enumerate(end_dist):
+        #     row[0:start_pos[i]] = 0
+        #     row[start_pos[i]+21:] = 0
+        #
+        # end_pos = np.argmax(end_dist, axis=1)
 
-        return start_pos, end_pos
+        # indicies of k largest values in start and end distributions
+        k = 4
+        start_k_pos = np.flip(np.argpartition(start_dist, -k, axis=1)[:, -k:], axis=1)
+        end_k_pos = np.flip(np.argpartition(end_dist, -k, axis=1)[:, -k:], axis=1)
+
+        start_pos, end_pos = [], []
+        for i in range(start_dist.shape[0]):
+            s_cands = start_k_pos[i]
+            e_cands = end_k_pos[i]
+            start, end = s_cands[0], e_cands[0]
+            value = 0
+            for s in s_cands:
+                for e in e_cands:
+                    if s <= e <= s + 21:  # enforce start pos <= end_pos <= start_pos + 20
+                        if start_dist[i][s] + end_dist[i][e] > value:
+                            start, end = s, e
+                            value = start_dist[i][s] + end_dist[i][e]
+            start_pos.append(start)
+            end_pos.append(end)
+
+        return np.array(start_pos), np.array(end_pos)
 
 
     def get_dev_loss(self, session, dev_context_path, dev_qn_path, dev_ans_path):

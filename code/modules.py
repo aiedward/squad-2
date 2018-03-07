@@ -50,9 +50,9 @@ class RNNEncoder(object):
         self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
         self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
 
-        self.rnn_cell_fw_2 = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw_2 = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_fw_2 = DropoutWrapper(self.rnn_cell_fw_2, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw_2 = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw_2 = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_bw_2 = DropoutWrapper(self.rnn_cell_bw_2, input_keep_prob=self.keep_prob)
 
     def build_graph(self, inputs, masks):
