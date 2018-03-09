@@ -45,15 +45,10 @@ class RNNEncoder(object):
         self.hidden_size = hidden_size
         self.keep_prob = keep_prob
 
-        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
-
-        self.rnn_cell_fw_2 = rnn_cell.GRUCell(self.hidden_size)
-        self.rnn_cell_fw_2 = DropoutWrapper(self.rnn_cell_fw_2, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw_2 = rnn_cell.GRUCell(self.hidden_size)
-        self.rnn_cell_bw_2 = DropoutWrapper(self.rnn_cell_bw_2, input_keep_prob=self.keep_prob)
 
     def build_graph(self, inputs, masks):
         """
@@ -72,20 +67,77 @@ class RNNEncoder(object):
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
             # Each is shape (batch_size, seq_len, hidden_size).
-            # (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs, input_lens, dtype=tf.float32)
-            out, _, _  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
-                                                                                 [self.rnn_cell_bw, self.rnn_cell_bw_2],
-                                                                                 inputs, sequence_length=input_lens,
-                                                                                 dtype=tf.float32)
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs, input_lens, dtype=tf.float32)
 
             # Concatenate the forward and backward hidden states
-            # out = tf.concat([fw_out, bw_out], 2)
+            out = tf.concat([fw_out, bw_out], 2)
 
             # Apply dropout
             out = tf.nn.dropout(out, self.keep_prob)
 
             return out
 
+class BiLSTM2Layer(object):
+    """
+    General-purpose module to encode a sequence using a RNN.
+    It feeds the input through a RNN and returns all the hidden states.
+
+    Note: In lecture 8, we talked about how you might use a RNN as an "encoder"
+    to get a single, fixed size vector representation of a sequence
+    (e.g. by taking element-wise max of hidden states).
+    Here, we're using the RNN as an "encoder" but we're not taking max;
+    we're just returning all the hidden states. The terminology "encoder"
+    still applies because we're getting a different "encoding" of each
+    position in the sequence, and we'll use the encodings downstream in the model.
+
+    This code uses a bidirectional GRU, but you could experiment with other types of RNN.
+    """
+
+    def __init__(self, hidden_size, keep_prob):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
+
+        self.rnn_cell_fw_2 = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw_2 = DropoutWrapper(self.rnn_cell_fw_2, input_keep_prob=self.keep_prob)
+        self.rnn_cell_bw_2 = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw_2 = DropoutWrapper(self.rnn_cell_bw_2, input_keep_prob=self.keep_prob)
+
+    def build_graph(self, inputs, masks):
+        """
+        Inputs:
+          inputs: Tensor shape (batch_size, seq_len, input_size)
+          masks: Tensor shape (batch_size, seq_len).
+            Has 1s where there is real input, 0s where there's padding.
+            This is used to make sure tf.nn.bidirectional_dynamic_rnn doesn't iterate through masked steps.
+
+        Returns:
+          out: Tensor shape (batch_size, seq_len, hidden_size*2).
+            This is all hidden states (fw and bw hidden states are concatenated).
+        """
+        with vs.variable_scope("RNNEncoder"):
+            input_lens = tf.reduce_sum(masks, reduction_indices=1)  # shape (batch_size)
+
+            # Note: fw_out and bw_out are the hidden states for every timestep.
+            # Each is shape (batch_size, seq_len, hidden_size).
+            out, _, _  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
+                                                                                 [self.rnn_cell_bw, self.rnn_cell_bw_2],
+                                                                                 inputs, sequence_length=input_lens,
+                                                                                 dtype=tf.float32)
+
+            # Apply dropout
+            out = tf.nn.dropout(out, self.keep_prob)
+
+            return out
 
 class SimpleSoftmaxLayer(object):
     """
@@ -184,6 +236,182 @@ class BasicAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)
 
             return attn_dist, output
+
+
+class Coattention(object):
+    def __init__(self, keep_prob, key_vec_size, value_vec_size, batch_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+        self.batch_size = batch_size
+
+    def build_graph(self, values, values_mask, keys):
+        """
+        Keys attend to values.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+          values_mask: Tensor shape (batch_size, num_values).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, value_vec_size)
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("Coattention"):
+            # size params:
+            # batch_size = 100, value vec size = 400
+            num_values = values.get_shape().as_list()[1]
+
+            # Calculate attention distribution
+            values_t = tf.transpose(values, perm=[0, 2, 1])  # (batch_size, value_vec_size, num_values)
+            W = tf.get_variable("W", shape=(self.value_vec_size, self.value_vec_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+            b = tf.get_variable("b", shape=(self.value_vec_size, num_values), initializer=tf.constant_initializer(0))
+
+            q_new = tf.map_fn(lambda x: tf.matmul(W, x) + b, values_t)
+
+            c_senti = tf.get_variable("c_senti", shape=(1, self.value_vec_size), initializer=tf.constant_initializer(0))
+            q_senti = tf.get_variable("q_senti", shape=(self.value_vec_size, 1), initializer=tf.constant_initializer(0))
+
+            # keys shape (batch_size, num_keys, value_vec_size) = (None, 600, 400)
+            # q_new shape(batch_size, value_vec_size, num_values) = (None, 400, 30)
+            c_concat = tf.map_fn(lambda x: tf.concat([x, c_senti], axis=0), keys)
+            q_concat = tf.map_fn(lambda x: tf.concat([x, q_senti], axis=1), q_new)
+
+            L = tf.matmul(c_concat, q_concat)  # shape (batch_size, num_keys+1, num_values+1) = (None, 601, 31)
+            print("---------------mask size: ", values_mask.get_shape().as_list())
+            new_values_mask = tf.map_fn(lambda x: tf.concat([x, [1]], axis=0), values_mask)
+            L_mask = tf.expand_dims(new_values_mask, 1)
+
+            # print("---------------L size: ", L.get_shape().as_list())
+            # print("---------------L mask size: ", L_mask.get_shape().as_list())
+
+            q_t = tf.transpose(q_concat, perm=[0, 2, 1])  # (batch_size, num_values+1, value_vec_size)
+            _, alpha_dist = masked_softmax(L, L_mask, 2)
+            a_output = tf.matmul(alpha_dist, q_t)  # (batch_size, num_keys+1, value_vec_size) = (None, 601, 400)
+            # print("---------------a output size: ", a_output.get_shape().as_list())
+
+            _, beta_dist = masked_softmax(L, L_mask, 1)
+            beta_dist_t = tf.transpose(beta_dist, perm=[0, 2, 1])
+            b_output = tf.matmul(beta_dist_t, c_concat)
+            # print("---------------b output size: ", b_output.get_shape().as_list())
+
+            s_output = tf.matmul(alpha_dist, b_output)
+            concat_output = tf.concat([s_output, a_output], axis=2)
+            concat_output = concat_output[:, :-1, :]
+            # print("---------------s_output size: ", s_output.get_shape().as_list())
+            # print("---------------concat_output size: ", concat_output.get_shape().as_list())
+
+            concat_output = tf.nn.dropout(concat_output, self.keep_prob)
+            return concat_output
+
+class SelfAttention(object):
+    def __init__(self, keep_prob, value_vec_size, batch_size, hidden_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+          hidden_size: size of trained parameter
+        """
+        self.keep_prob = keep_prob
+        self.value_vec_size = value_vec_size
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+
+    def build_graph(self, values):
+        """
+        Values attend to values.
+        For each value, return an attention distribution and an attention output vector.
+
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("SelfAttention"):
+            # size params:
+            # batch_size = 100, value vec size = 400
+            num_values = values.get_shape().as_list()[1]
+
+            # values: (batch_size, num_values, value_vec_size)
+
+            # Calculate attention distribution
+            W1 = tf.get_variable("W1", shape=(self.value_vec_size, self.hidden_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+
+            W2 = tf.get_variable("W2", shape=(self.value_vec_size, self.hidden_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+
+            V = tf.get_variable("V", shape=(self.hidden_size, 1), initializer=tf.contrib.layers.xavier_initializer())
+
+
+            W1values = tf.map_fn(lambda x: tf.matmul(x, W1), values)  # (batch_size, num_values, hidden_size)
+            W2values = tf.map_fn(lambda x: tf.matmul(x, W2), values)
+
+            # (batch_size, num_values, num_values) of W1 @ v_i + W2 @ v_j
+            values_expand = tf.ones((self.batch_size, num_values, num_values, self.hidden_size)) *\
+                            tf.expand_dims(W1values, axis=1) + tf.expand_dims(W2values, axis=2)
+
+            e_shape = (self.batch_size, num_values, num_values)
+            e = tf.reshape(tf.matmul(tf.reshape(tf.tanh(values_expand), [-1, self.hidden_size]), V), e_shape)
+
+            alpha_dist = tf.nn.softmax(e)
+            a_output = tf.matmul(alpha_dist, values)
+
+            return a_output
+
+
+class BiLSTMEncoder(object):
+
+    def __init__(self, hidden_size, keep_prob, scope="BiLSTMEncoder"):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
+        self.scope = scope
+
+    def build_graph(self, inputs):
+        with vs.variable_scope(self.scope):
+            # input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+
+            # Note: fw_out and bw_out are the hidden states for every timestep.
+            # Each is shape (batch_size, seq_len, hidden_size).
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs,
+                                                                  dtype=tf.float32)
+
+            # Concatenate the forward and backward hidden states
+            out = tf.concat([fw_out, bw_out], 2)
+
+            # Apply dropout
+            out = tf.nn.dropout(out, self.keep_prob)
+            return out
 
 
 def masked_softmax(logits, mask, dim):
