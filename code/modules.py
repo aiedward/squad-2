@@ -381,7 +381,10 @@ class SelfAttention(object):
             alpha_dist = tf.nn.softmax(e)
             a_output = tf.matmul(alpha_dist, values)
 
-            return a_output
+            concat_output = tf.concat([values, a_output], axis=2)
+
+            concat_output = tf.nn.dropout(concat_output, self.keep_prob)
+            return concat_output
 
 
 class BiLSTMEncoder(object):
