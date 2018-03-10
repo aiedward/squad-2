@@ -124,7 +124,7 @@ class BiLSTM2Layer(object):
           out: Tensor shape (batch_size, seq_len, hidden_size*2).
             This is all hidden states (fw and bw hidden states are concatenated).
         """
-        with vs.variable_scope("RNNEncoder"):
+        with vs.variable_scope("BiLSTM2Layer"):
             input_lens = tf.reduce_sum(masks, reduction_indices=1)  # shape (batch_size)
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
