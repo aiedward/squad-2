@@ -129,10 +129,10 @@ class BiLSTM2Layer(object):
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
             # Each is shape (batch_size, seq_len, hidden_size).
-            out, _, _  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
-                                                                                 [self.rnn_cell_bw, self.rnn_cell_bw_2],
-                                                                                 inputs, sequence_length=input_lens,
-                                                                                 dtype=tf.float32)
+            out, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
+                                                                       [self.rnn_cell_bw, self.rnn_cell_bw_2],
+                                                                       inputs, sequence_length=input_lens,
+                                                                       dtype=tf.float32)
 
             # Apply dropout
             out = tf.nn.dropout(out, self.keep_prob)
@@ -381,10 +381,10 @@ class SelfAttention(object):
             alpha_dist = tf.nn.softmax(e)
             a_output = tf.matmul(alpha_dist, values)
 
-            concat_output = tf.concat([values, a_output], axis=2)
-
-            concat_output = tf.nn.dropout(concat_output, self.keep_prob)
-            return concat_output
+            # concat_output = tf.concat([values, a_output], axis=2)
+            #
+            # concat_output = tf.nn.dropout(concat_output, self.keep_prob)
+            return a_output
 
 
 class BiLSTMEncoder(object):
