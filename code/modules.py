@@ -368,7 +368,7 @@ class SelfAttention(object):
             W1values = tf.map_fn(lambda x: tf.matmul(x, W1), values)  # (batch_size, num_values, hidden_size)
             W2values = tf.map_fn(lambda x: tf.matmul(x, W2), values)
 
-            e = tf.matmul(tf.nn.tanh(W1values), tf.nn.tanh(tf.transpose(W2values, perm=[0, 2, 1])))
+            e = tf.matmul(tf.nn.relu(W1values), tf.nn.relu(tf.transpose(W2values, perm=[0, 2, 1])))
 
             #
             # # (batch_size, num_values, num_values) of W1 @ v_i + W2 @ v_j
