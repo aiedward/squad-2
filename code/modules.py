@@ -368,12 +368,15 @@ class SelfAttention(object):
             W1values = tf.map_fn(lambda x: tf.matmul(x, W1), values)  # (batch_size, num_values, hidden_size)
             W2values = tf.map_fn(lambda x: tf.matmul(x, W2), values)
 
-            # (batch_size, num_values, num_values) of W1 @ v_i + W2 @ v_j
-            values_expand = tf.ones((self.batch_size, num_values, num_values, self.hidden_size)) *\
-                            tf.expand_dims(W1values, axis=1) + tf.expand_dims(W2values, axis=2)
+            e = tf.matmul(tf.nn.tanh(W1values), tf.nn.tanh(tf.transpose(W2values, perm=[0, 2, 1])))
 
-            e_shape = (self.batch_size, num_values, num_values)
-            e = tf.reshape(tf.matmul(tf.reshape(tf.tanh(values_expand), [-1, self.hidden_size]), V), e_shape)
+            #
+            # # (batch_size, num_values, num_values) of W1 @ v_i + W2 @ v_j
+            # values_expand = tf.ones((self.batch_size, num_values, num_values, self.hidden_size)) *\
+            #                 tf.expand_dims(W1values, axis=1) + tf.expand_dims(W2values, axis=2)
+            #
+            # e_shape = (self.batch_size, num_values, num_values)
+            # e = tf.reshape(tf.matmul(tf.reshape(tf.tanh(values_expand), [-1, self.hidden_size]), V), e_shape)
 
             alpha_dist = tf.nn.softmax(e)
             a_output = tf.matmul(alpha_dist, values)
