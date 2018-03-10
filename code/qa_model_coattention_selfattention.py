@@ -149,7 +149,7 @@ class QAModel(object):
         self_attention_layer = SelfAttention(self.keep_prob,
                                              self.FLAGS.hidden_size*2,
                                              self.FLAGS.batch_size,
-                                             self.FLAGS.hidden_size*2)
+                                             self.FLAGS.hidden_size)
         self_atten_output = self_attention_layer.build_graph(coattn_RNN_output)
 
         biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob, scope="biLSTM2")
