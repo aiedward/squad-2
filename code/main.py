@@ -27,7 +27,7 @@ import logging
 import tensorflow as tf
 
 # from qa_model import QAModel
-from qa_model_coattention import QAModel
+from qa_model_co_self_attention import QAModel
 from vocab import get_glove
 from official_eval_helper import get_json_data, generate_answers
 
