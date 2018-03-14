@@ -108,15 +108,12 @@ class BiLSTM2Layer(object):
         self.hidden_size = hidden_size
         self.keep_prob = keep_prob
 
-        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = rnn_cell.GRUCell(self.hidden_size)
         self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
 
-        self.rnn_cell_fw_2 = rnn_cell.LSTMCell(self.hidden_size)
-        self.rnn_cell_fw_2 = DropoutWrapper(self.rnn_cell_fw_2, input_keep_prob=self.keep_prob)
-        self.rnn_cell_bw_2 = rnn_cell.LSTMCell(self.hidden_size)
-        self.rnn_cell_bw_2 = DropoutWrapper(self.rnn_cell_bw_2, input_keep_prob=self.keep_prob)
+
 
     def build_graph(self, inputs, masks):
         """
@@ -135,8 +132,8 @@ class BiLSTM2Layer(object):
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
             # Each is shape (batch_size, seq_len, hidden_size).
-            out, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw, self.rnn_cell_fw_2],
-                                                                       [self.rnn_cell_bw, self.rnn_cell_bw_2],
+            out, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn([self.rnn_cell_fw],
+                                                                       [self.rnn_cell_bw],
                                                                        inputs, sequence_length=input_lens,
                                                                        dtype=tf.float32)
 
