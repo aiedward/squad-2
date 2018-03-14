@@ -31,6 +31,7 @@ import tensorflow as tf
 from qa_model_coattention_selfattention import QAModel
 from vocab import get_glove
 from official_eval_helper import get_json_data, generate_answers
+from tensorflow.python import pywrap_tensorflow
 
 
 logging.basicConfig(level=logging.INFO)
@@ -75,6 +76,14 @@ FLAGS = tf.app.flags.FLAGS
 os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
 
 
+def print_tensors_in_checkpoint_file(file_name):
+    varlist = []
+    reader = pywrap_tensorflow.NewCheckpointReader(file_name)
+    var_to_shape_map = reader.get_variable_to_shape_map()
+    for key in sorted(var_to_shape_map):
+        varlist.append(key)
+    return varlist
+
 def initialize_model(session, model, train_dir, expect_exists):
     """
     Initializes model from train_dir.
@@ -91,7 +100,14 @@ def initialize_model(session, model, train_dir, expect_exists):
     v2_path = ckpt.model_checkpoint_path + ".index" if ckpt else ""
     if ckpt and (tf.gfile.Exists(ckpt.model_checkpoint_path) or tf.gfile.Exists(v2_path)):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
-        model.saver.restore(session, ckpt.model_checkpoint_path)
+        # model.saver.restore(session, ckpt.model_checkpoint_path)
+        session.run(tf.global_variables_initializer())
+        var_list = print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path)
+        variables = session.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        restore_list = [var for var in variables if var._shared_name in var_list]
+        saver = tf.train.Saver(restore_list)
+        saver.restore(session, ckpt.model_checkpoint_path)
+        print("Model restored.")
     else:
         if expect_exists:
             raise Exception("There is no saved checkpoint at %s" % train_dir)
