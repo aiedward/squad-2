@@ -151,7 +151,7 @@ class QAModel(object):
 
         pointerNet = PointerNetwork(self.keep_prob,
                                               self.FLAGS.hidden_size*2,
-                                              self.FLAGS.hidden_size,
+                                              self.FLAGS.hidden_size*2,
                                               self.FLAGS.batch_size,
                                               self.FLAGS.hidden_size)
         self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(
