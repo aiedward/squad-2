@@ -390,7 +390,77 @@ class SelfAttention(object):
             # concat_output = tf.concat([values, a_output], axis=2)
             #
             # concat_output = tf.nn.dropout(concat_output, self.keep_prob)
-            return a_output
+            return a_output, alpha_dist
+
+
+class PointerNetwork(object):
+    def __init__(self, keep_prob, q_vec_size, c_vec_size, batch_size, hidden_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          q_vec_size: size of the question vectors. int
+          c_vec_size: size of the value vectors. int
+          hidden_size: size of trained parameter
+
+        """
+        self.keep_prob = keep_prob
+        self.q_vec_size = q_vec_size
+        self.c_vec_size = c_vec_size
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.rnn = rnn_cell.GRUCell(self.q_vec_size)
+
+    def build_graph(self, questions, questions_mask, contexts, contexts_mask):
+
+        with vs.variable_scope("PointerNetwork"):
+            # size params:
+            # batch_size = 100, value vec size = 400
+            num_questions = questions.get_shape().as_list()[1]
+
+            # values: (batch_size, num_values, value_vec_size)
+
+            # Calculate attention distribution for questions
+            W0 = tf.get_variable("W0", shape=(self.q_vec_size, self.hidden_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+
+            V0 = tf.get_variable("V0", shape=(self.hidden_size, 1), initializer=tf.contrib.layers.xavier_initializer())
+
+
+            W0values = tf.map_fn(lambda x: tf.matmul(x, W0), questions)  # (batch_size, num_questions, hidden_size)
+            q_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V0), W0values)
+            q_attn_logits_mask = tf.expand_dims(questions_mask, 2)  # shape (batch_size, 1, num_questions)
+            _, q_dist = masked_softmax(q_attn_logits, q_attn_logits_mask, 1)
+            h0 = tf.matmul(tf.transpose(q_dist, perm=[0, 2, 1]), questions) # shape (batch_size, 1, q_vec_size)
+            h0 = tf.squeeze(h0, axis=1)
+
+            # Calculate attention distribution for start index
+            W_c = tf.get_variable("W_c", shape=(self.c_vec_size, self.hidden_size),
+                                initializer=tf.contrib.layers.xavier_initializer())
+            W_h = tf.get_variable("W_h", shape=(self.q_vec_size, self.hidden_size),
+                                 initializer=tf.contrib.layers.xavier_initializer())
+            V = tf.get_variable("V", shape=(self.hidden_size, 1), initializer=tf.contrib.layers.xavier_initializer())
+
+            hP = tf.map_fn(lambda x: tf.matmul(x, W_c), contexts)  # (batch_size, num_questions, hidden_size)
+            htPrev = tf.expand_dims(tf.matmul(h0, W_h), 1)  # (batch_size, 1, hidden_size)
+
+            sum1 = tf.tanh(hP + htPrev)
+            start_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V), sum1)
+            context_attn_logits_mask = tf.expand_dims(contexts_mask, 2)  # shape (batch_size, num_contexts, 1)
+            start_logits, start_dist = masked_softmax(start_attn_logits, context_attn_logits_mask, 1)  # shape (batch_size, num_contexts, 1)
+
+            c1 = tf.matmul(tf.transpose(start_dist, perm=[0, 2, 1]), contexts) # shape (batch_size, 1, c_vec_size)
+            _, h1 = self.rnn(tf.squeeze(c1, axis=1), h0)
+
+            # Calculate attention distribution for end index
+            htPrev = tf.expand_dims(tf.matmul(h0, W_h), 1)  # (batch_size, 1, hidden_size)
+
+            sum2 = tf.tanh(hP + htPrev)
+            end_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V), sum2)
+            end_logits, end_dist = masked_softmax(end_attn_logits, context_attn_logits_mask, 1)  # shape (batch_size, num_contexts, 1)
+
+            return tuple(tf.squeeze(vec, axis=2) for vec in (start_logits, start_dist, end_logits, end_dist))
+
+
 
 
 class BiLSTMEncoder(object):
