@@ -141,21 +141,21 @@ class QAModel(object):
         biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob)
         coattn_RNN_output = biLSTM_encoder.build_graph(coattn_output)
 
-        # self_attention_layer = SelfAttention(self.keep_prob,
-        #                                      self.FLAGS.hidden_size*2,
-        #                                      self.FLAGS.batch_size,
-        #                                      self.FLAGS.hidden_size)
-        # coattn_RNN_output, atten_dist = self_attention_layer.build_graph(coattn_RNN_output)
-        #
-        # biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob, scope="biLSTM2")
-        # overall_output = biLSTM_encoder.build_graph(coattn_RNN_output)
+        self_attention_layer = SelfAttention(self.keep_prob,
+                                             self.FLAGS.hidden_size*2,
+                                             self.FLAGS.batch_size,
+                                             self.FLAGS.hidden_size)
+        coattn_RNN_output, atten_dist = self_attention_layer.build_graph(coattn_RNN_output)
+        biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob, scope="biLSTM2")
+        overall_output = biLSTM_encoder.build_graph(coattn_RNN_output)
 
         pointerNet = PointerNetwork(self.keep_prob,
                                               self.FLAGS.hidden_size*2,
-                                              self.FLAGS.hidden_size*2,
+                                              self.FLAGS.hidden_size,
                                               self.FLAGS.batch_size,
                                               self.FLAGS.hidden_size)
-        self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(question_hiddens, self.qn_mask, coattn_RNN_output, self.context_mask)
+        self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(
+            question_hiddens, self.qn_mask, overall_output, self.context_mask)
 
 
     def add_loss(self):
