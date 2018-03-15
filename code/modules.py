@@ -428,8 +428,9 @@ class PointerNetwork(object):
 
             W0values = tf.map_fn(lambda x: tf.matmul(x, W0), questions)  # (batch_size, num_questions, hidden_size)
             q_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V0), W0values)
-            q_attn_logits_mask = tf.expand_dims(questions_mask, 2)  # shape (batch_size, 1, num_questions)
-            _, q_dist = masked_softmax(q_attn_logits, q_attn_logits_mask, 1)
+            # q_attn_logits_mask = tf.expand_dims(questions_mask, 2)  # shape (batch_size, num_questions, 1,)
+            # _, q_dist = masked_softmax(q_attn_logits, q_attn_logits_mask, 1)
+            q_dist = tf.nn.softmax(q_attn_logits, 1)
             h0 = tf.matmul(tf.transpose(q_dist, perm=[0, 2, 1]), questions) # shape (batch_size, 1, q_vec_size)
             h0 = tf.squeeze(h0, axis=1)
 
