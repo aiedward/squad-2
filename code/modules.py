@@ -408,7 +408,7 @@ class PointerNetwork(object):
         self.c_vec_size = c_vec_size
         self.batch_size = batch_size
         self.hidden_size = hidden_size
-        self.rnn = rnn_cell.GRUCell(self.q_vec_size)
+        self.rnn = rnn_cell.RNNCell(self.q_vec_size)
 
     def build_graph(self, questions, questions_mask, contexts, contexts_mask):
 
