@@ -452,7 +452,7 @@ class PointerNetwork(object):
             _, h1 = self.rnn(tf.squeeze(c1, axis=1), h0)
 
             # Calculate attention distribution for end index
-            htPrev = tf.expand_dims(tf.matmul(h0, W_h), 1)  # (batch_size, 1, hidden_size)
+            htPrev = tf.expand_dims(tf.matmul(h1, W_h), 1)  # (batch_size, 1, hidden_size)
 
             sum2 = tf.tanh(hP + htPrev)
             end_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V), sum2)
