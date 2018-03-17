@@ -97,6 +97,11 @@ class QAModel(object):
         # This is necessary so that we can instruct the model to use dropout when training, but not when testing
         self.keep_prob = tf.placeholder_with_default(1.0, shape=())
 
+        # Add a placeholder to feed in the is_training flag (for BatchNorm).
+        # This is necessary so that we can instruct the model to use BatchNorm when training, but not when testing
+        self.is_training = tf.placeholder_with_default(False, shape=())
+
+
 
     def add_embedding_layer(self, emb_matrix):
         """
@@ -134,6 +139,17 @@ class QAModel(object):
         encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
         context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
         question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+        question_hiddens = tf.contrib.layers.batch_norm(question_hiddens,
+                                     center=True, scale=True,
+                                     is_training=self.is_training,
+                                     scope='question_bn')
+
+        context_hiddens = tf.contrib.layers.batch_norm(context_hiddens,
+                                     center=True, scale=True,
+                                     is_training=self.is_training,
+                                     scope='context_bn')
+
 
         coattention_layer = Coattention(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2, self.FLAGS.batch_size)
         coattn_output = coattention_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens)
@@ -217,6 +233,7 @@ class QAModel(object):
         input_feed[self.qn_mask] = batch.qn_mask
         input_feed[self.ans_span] = batch.ans_span
         input_feed[self.keep_prob] = 1.0 - self.FLAGS.dropout # apply dropout
+        input_feed[self.is_training] = True
 
         # output_feed contains the things we want to fetch.
         output_feed = [self.updates, self.summaries, self.loss, self.global_step, self.param_norm, self.gradient_norm]
@@ -249,6 +266,7 @@ class QAModel(object):
         input_feed[self.qn_mask] = batch.qn_mask
         input_feed[self.ans_span] = batch.ans_span
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
+        # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
 
         output_feed = [self.loss]
 
@@ -274,6 +292,7 @@ class QAModel(object):
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_mask] = batch.qn_mask
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
+        # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
 
         output_feed = [self.probdist_start, self.probdist_end]
         [probdist_start, probdist_end] = session.run(output_feed, input_feed)
