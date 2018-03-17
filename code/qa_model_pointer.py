@@ -143,11 +143,13 @@ class QAModel(object):
         question_hiddens = tf.contrib.layers.batch_norm(question_hiddens,
                                      center=True, scale=True,
                                      is_training=self.is_training,
+                                     updates_collections=None,
                                      scope='question_bn')
 
         context_hiddens = tf.contrib.layers.batch_norm(context_hiddens,
                                      center=True, scale=True,
                                      is_training=self.is_training,
+                                     updates_collections=None,
                                      scope='context_bn')
 
 
@@ -428,7 +430,7 @@ class QAModel(object):
                 em_total += em
 
                 # Optionally pretty-print
-                if print_to_screen and em < 1:
+                if print_to_screen and f1 is 0:
                     print_example(self.word2id, batch.context_tokens[ex_idx], batch.qn_tokens[ex_idx], batch.ans_span[ex_idx, 0], batch.ans_span[ex_idx, 1], pred_ans_start, pred_ans_end, true_answer, pred_answer, f1, em)
 
                 if num_samples != 0 and example_num >= num_samples:
