@@ -409,7 +409,7 @@ class QAModel(object):
                 em_total += em
 
                 # Optionally pretty-print
-                if print_to_screen:
+                if print_to_screen and em < 1:
                     print_example(self.word2id, batch.context_tokens[ex_idx], batch.qn_tokens[ex_idx], batch.ans_span[ex_idx, 0], batch.ans_span[ex_idx, 1], pred_ans_start, pred_ans_end, true_answer, pred_answer, f1, em)
 
                 if num_samples != 0 and example_num >= num_samples:
