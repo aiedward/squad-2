@@ -423,6 +423,9 @@ class QAModel(object):
 
         toc = time.time()
         logging.info("Calculating F1/EM for %i examples in %s set took %.2f seconds" % (example_num, dataset, toc-tic))
+        if print_to_screen:
+            logging.info(
+                "F1: %2f, EM: %.2f" % (f1_total, em_total))
 
         return f1_total, em_total
 
