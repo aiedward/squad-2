@@ -271,7 +271,7 @@ class QAModel(object):
         input_feed[self.context_mask] = batch.context_mask
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_mask] = batch.qn_mask
-        input_feed[self.qn_mask] = batch.qn_mask
+        input_feed[self.qn_deps] = batch.qn_deps
         input_feed[self.ans_span] = batch.ans_span
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
         # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
@@ -299,7 +299,7 @@ class QAModel(object):
         input_feed[self.context_mask] = batch.context_mask
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_mask] = batch.qn_mask
-        input_feed[self.qn_mask] = batch.qn_mask
+        input_feed[self.qn_deps] = batch.qn_deps
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
         # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
 
