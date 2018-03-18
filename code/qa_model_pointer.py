@@ -89,6 +89,8 @@ class QAModel(object):
         # allows you to run the same model with variable batch_size
         self.context_ids = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
         self.context_mask = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
+        self.context_deps = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
+        self.context_deps = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
         self.qn_ids = tf.placeholder(tf.int32, shape=[None, self.FLAGS.question_len])
         self.qn_deps = tf.placeholder(tf.float32, shape=[None, self.FLAGS.question_len])
         self.qn_mask = tf.placeholder(tf.int32, shape=[None, self.FLAGS.question_len])
@@ -120,8 +122,7 @@ class QAModel(object):
             # Get the word embeddings for the context and question,
             # using the placeholders self.context_ids and self.qn_ids
             self.context_embs = embedding_ops.embedding_lookup(embedding_matrix, self.context_ids) # shape (batch_size, context_len, embedding_size)
-            context_zeros = tf.expand_dims(tf.zeros_like(self.context_ids, dtype=tf.float32), 2)
-            self.context_embs = tf.concat([self.context_embs, context_zeros], axis=2)
+            self.context_embs = tf.concat([self.context_embs,  tf.expand_dims(self.context_deps, 2)], axis=2)
             self.qn_embs = embedding_ops.embedding_lookup(embedding_matrix, self.qn_ids) # shape (batch_size, question_len, embedding_size)
             self.qn_embs = tf.concat([self.qn_embs, tf.expand_dims(self.qn_deps, 2)], axis=2)
 
@@ -235,6 +236,7 @@ class QAModel(object):
         input_feed = {}
         input_feed[self.context_ids] = batch.context_ids
         input_feed[self.context_mask] = batch.context_mask
+        input_feed[self.context_deps] = batch.context_deps
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_deps] = batch.qn_deps
         input_feed[self.qn_mask] = batch.qn_mask
@@ -269,9 +271,10 @@ class QAModel(object):
         input_feed = {}
         input_feed[self.context_ids] = batch.context_ids
         input_feed[self.context_mask] = batch.context_mask
+        input_feed[self.context_deps] = batch.context_deps
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_mask] = batch.qn_mask
-        input_feed[self.qn_mask] = batch.qn_mask
+        input_feed[self.qn_deps] = batch.qn_deps
         input_feed[self.ans_span] = batch.ans_span
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
         # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
@@ -297,9 +300,10 @@ class QAModel(object):
         input_feed = {}
         input_feed[self.context_ids] = batch.context_ids
         input_feed[self.context_mask] = batch.context_mask
+        input_feed[self.context_deps] = batch.context_deps
         input_feed[self.qn_ids] = batch.qn_ids
         input_feed[self.qn_mask] = batch.qn_mask
-        input_feed[self.qn_mask] = batch.qn_mask
+        input_feed[self.qn_deps] = batch.qn_deps
         # note you don't supply keep_prob here, so it will default to 1 i.e. no dropout
         # note you don't supply is_training here, so it will default to False i.e. no BatchNorm
 
