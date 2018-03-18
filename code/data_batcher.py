@@ -121,7 +121,7 @@ def refill_batches(batches, word2id, context_file, qn_file, ans_file, batch_size
     while context_line and qn_line and ans_line: # while you haven't reached the end
         
         qn_deps = PARSER.parse(qn_line)
-        context_deps = PARSER(context_line)
+        context_deps = PARSER.parse(context_line)
 
         # Convert tokens to word ids
         context_tokens, context_ids = sentence_to_token_ids(context_line, word2id)
