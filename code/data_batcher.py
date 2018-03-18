@@ -157,6 +157,7 @@ def refill_batches(batches, word2id, context_file, qn_file, ans_file, batch_size
                 continue
             else: # truncate
                 context_ids = context_ids[:context_len]
+                context_deps = context_deps[:context_len]
 
         # add to examples
         examples.append((context_ids, context_tokens, context_deps, qn_ids, qn_tokens, qn_deps, ans_span, ans_tokens))
