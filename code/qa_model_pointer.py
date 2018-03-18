@@ -163,22 +163,23 @@ class QAModel(object):
         biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob)
         coattn_RNN_output = biLSTM_encoder.build_graph(coattn_output)
 
-        # self_attention_layer = SelfAttention(self.keep_prob,
-        #                                      self.FLAGS.hidden_size*2,
-        #                                      self.FLAGS.batch_size,
-        #                                      self.FLAGS.hidden_size)
-        # coattn_RNN_output, atten_dist = self_attention_layer.build_graph(coattn_RNN_output)
-        #
-        # biLSTM_encoder = BiLSTMEncoder(self.FLAGS.hidden_size, self.keep_prob, scope="biLSTM2")
-        # overall_output = biLSTM_encoder.build_graph(coattn_RNN_output)
+        # Apply fully connected layer to each blended representation
+        # Note, blended_reps_final corresponds to b' in the handout
+        # Note, tf.contrib.layers.fully_connected applies a ReLU non-linarity here by default
+        blended_reps_final = tf.contrib.layers.fully_connected(coattn_RNN_output,
+                                                               num_outputs=self.FLAGS.hidden_size)  # blended_reps_final is shape (batch_size, context_len, hidden_size)
 
-        pointerNet = PointerNetwork(self.keep_prob,
-                                              self.FLAGS.hidden_size*2,
-                                              self.FLAGS.hidden_size*2,
-                                              self.FLAGS.batch_size,
-                                              self.FLAGS.hidden_size)
-        self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(question_hiddens, self.qn_mask, coattn_RNN_output, self.context_mask)
+        # Use softmax layer to compute probability distribution for start location
+        # Note this produces self.logits_start and self.probdist_start, both of which have shape (batch_size, context_len)
+        with vs.variable_scope("StartDist"):
+            softmax_layer_start = SimpleSoftmaxLayer()
+            self.logits_start, self.probdist_start = softmax_layer_start.build_graph(blended_reps_final, self.context_mask)
 
+        # Use softmax layer to compute probability distribution for end location
+        # Note this produces self.logits_end and self.probdist_end, both of which have shape (batch_size, context_len)
+        with vs.variable_scope("EndDist"):
+            softmax_layer_end = SimpleSoftmaxLayer()
+            self.logits_end, self.probdist_end = softmax_layer_end.build_graph(blended_reps_final, self.context_mask)
 
     def add_loss(self):
         """
