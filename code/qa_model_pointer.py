@@ -89,8 +89,7 @@ class QAModel(object):
         # allows you to run the same model with variable batch_size
         self.context_ids = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
         self.context_mask = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
-        self.context_deps = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
-        self.context_deps = tf.placeholder(tf.int32, shape=[None, self.FLAGS.context_len])
+        self.context_deps = tf.placeholder(tf.float32, shape=[None, self.FLAGS.context_len])
         self.qn_ids = tf.placeholder(tf.int32, shape=[None, self.FLAGS.question_len])
         self.qn_deps = tf.placeholder(tf.float32, shape=[None, self.FLAGS.question_len])
         self.qn_mask = tf.placeholder(tf.int32, shape=[None, self.FLAGS.question_len])
