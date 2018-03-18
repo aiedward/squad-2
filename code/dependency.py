@@ -18,10 +18,16 @@ class DependencyParser(object):
     """Parses dependencies from text"""
 
     def __init__(self):
-        self.nlp = spacy.load('en')
+        self.nlp = spacy.load('en', disable=['ner', 'textcat'])
         self.nlp.tokenizer = WhitespaceTokenizer(self.nlp.vocab)
 
     def parse(self, text):
-        return [token.dep for token in self.nlp(unicode(text.strip("\n")))]
+        try:
+            utext = unicode(text.strip("\n"))
+            text = text
+            return [token.dep for token in self.nlp(text.strip("\n"))]
+        except UnicodeDecodeError:
+            pass
+
 
 PARSER = DependencyParser()

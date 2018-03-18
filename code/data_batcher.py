@@ -27,6 +27,7 @@ import re
 import numpy as np
 from six.moves import xrange
 from vocab import PAD_ID, UNK_ID
+import io
 
 from dependency import PARSER
 
@@ -196,16 +197,9 @@ def get_batch_generator(word2id, context_path, qn_path, ans_path, batch_size, co
       discard_long: If True, discard any examples that are longer than context_len or question_len.
         If False, truncate those exmaples instead.
     """
-
-
-
-    context_file, qn_file, ans_file = None, None, None
-    if sys.version_info[0] < 3:
-        context_file, qn_file, ans_file = open(context_path), open(qn_path), open(ans_path)
-    else:
-        context_file, qn_file, ans_file = open(context_path, encoding="utf8"), \
-                                          open(qn_path, encoding="utf8"), \
-                                          open(ans_path, encoding="utf8")
+    context_file, qn_file, ans_file = io.open(context_path, encoding="utf8"), \
+                                      io.open(qn_path, encoding="utf8"), \
+                                      io.open(ans_path, encoding="utf8")
     batches = []
 
     while True:
@@ -226,6 +220,7 @@ def get_batch_generator(word2id, context_path, qn_path, ans_path, batch_size, co
         qn_mask = (qn_ids != PAD_ID).astype(np.int32) # shape (question_len, batch_size)
 
         # Make qn_deps into a np array
+        qn_deps = padded(qn_deps, question_len) # pad questions to length question_len
         qn_deps = np.array(qn_deps) # shape (question_len, batch_size)
 
         # Make context_ids into a np array and create context_mask
