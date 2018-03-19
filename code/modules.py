@@ -410,7 +410,7 @@ class PointerNetwork(object):
         self.hidden_size = hidden_size
         self.rnn = rnn_cell.GRUCell(self.q_vec_size)
 
-    def build_graph(self, questions, questions_mask, contexts, contexts_mask):
+    def build_graph(self, questions, questions_mask, question_deps, contexts, contexts_mask):
 
         with vs.variable_scope("PointerNetwork"):
             # size params:
@@ -423,13 +423,15 @@ class PointerNetwork(object):
             W0 = tf.get_variable("W0", shape=(self.q_vec_size, self.hidden_size),
                                 initializer=tf.contrib.layers.xavier_initializer())
 
-            V0 = tf.get_variable("V0", shape=(self.hidden_size, 1), initializer=tf.contrib.layers.xavier_initializer())
+
+            V0 = tf.contrib.layers.fully_connected(question_deps,
+                                              num_outputs=self.hidden_size)  # (batch_size, hidden_size)
 
 
             W0values = tf.map_fn(lambda x: tf.matmul(x, W0), questions)  # (batch_size, num_questions, hidden_size)
-            q_attn_logits = tf.map_fn(lambda x: tf.matmul(tf.tanh(x), V0), W0values)
-            q_attn_logits_mask = tf.expand_dims(questions_mask, 2)  # shape (batch_size, 1, num_questions)
-            _, q_dist = masked_softmax(q_attn_logits, q_attn_logits_mask, 1)
+            q_attn_logits = tf.matmul(tf.nn.relu(W0values), tf.expand_dims(V0, axis=2)) # shape (batch_size, num_questions, 1)
+            q_attn_logits_mask = tf.expand_dims(questions_mask, 2)  # shape (batch_size, num_questions, 1)
+            _, q_dist = masked_softmax(q_attn_logits, q_attn_logits_mask, 1) # shape (batch_size, num_questions, 1)
             h0 = tf.matmul(tf.transpose(q_dist, perm=[0, 2, 1]), questions) # shape (batch_size, 1, q_vec_size)
             h0 = tf.squeeze(h0, axis=1)
 

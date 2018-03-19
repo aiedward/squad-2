@@ -120,10 +120,7 @@ class QAModel(object):
             # Get the word embeddings for the context and question,
             # using the placeholders self.context_ids and self.qn_ids
             self.context_embs = embedding_ops.embedding_lookup(embedding_matrix, self.context_ids) # shape (batch_size, context_len, embedding_size)
-            context_zeros = tf.expand_dims(tf.zeros_like(self.context_ids, dtype=tf.float32), 2)
-            self.context_embs = tf.concat([self.context_embs, context_zeros], axis=2)
             self.qn_embs = embedding_ops.embedding_lookup(embedding_matrix, self.qn_ids) # shape (batch_size, question_len, embedding_size)
-            self.qn_embs = tf.concat([self.qn_embs, tf.expand_dims(self.qn_deps, 2)], axis=2)
 
 
     def build_graph(self):
@@ -177,7 +174,8 @@ class QAModel(object):
                                               self.FLAGS.hidden_size*2,
                                               self.FLAGS.batch_size,
                                               self.FLAGS.hidden_size)
-        self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(question_hiddens, self.qn_mask, coattn_RNN_output, self.context_mask)
+        self.logits_start, self.probdist_start, self.logits_end, self.probdist_end = pointerNet.build_graph(
+            question_hiddens, self.qn_mask, self.qn_deps, coattn_RNN_output, self.context_mask)
 
 
     def add_loss(self):
